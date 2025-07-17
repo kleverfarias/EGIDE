@@ -5,8 +5,15 @@ import { getFirestore, collection, doc, setDoc, getDoc, addDoc, getDocs, onSnaps
 import { Shield, Users, FileText, PlusCircle, Edit, Trash2, LogOut, Calendar, MapPin, ClipboardList, CheckSquare, XSquare, BarChart2, AlertTriangle, Download, History, UserPlus, Bell, ChevronDown, ChevronUp } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DO FIREBASE ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'egide-pcc-app';
+// Para publicar na Vercel, você DEVE configurar esta variável de ambiente.
+// Nome da variável: REACT_APP_FIREBASE_CONFIG
+// Valor: O objeto de configuração do Firebase, colado como uma string.
+// Se a variável não for encontrada, o app usará um objeto vazio, causando um erro controlado.
+const firebaseConfig = process.env.REACT_APP_FIREBASE_CONFIG
+    ? JSON.parse(process.env.REACT_APP_FIREBASE_CONFIG)
+    : {};
+
+const appId = 'egide-pcc-app'; // O App ID pode ser fixo para o projeto
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -63,9 +70,16 @@ const getWeekInfo = (date = new Date()) => {
 const LoadingSpinner = () => <div className="flex justify-center items-center h-full w-full"><div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600"></div></div>;
 const Modal = ({ children, onClose, size = '3xl' }) => <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4"><div className={`bg-gray-100 rounded-2xl shadow-2xl w-full max-w-${size} max-h-[90vh] overflow-y-auto p-8 relative animate-fade-in-up`}><button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 transition-colors"><XSquare size={28} /></button>{children}</div></div>;
 const Notification = ({ message, type, onDismiss }) => {
+    React.useEffect(() => {
+        if (message) {
+            const timer = setTimeout(() => onDismiss(), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [message, onDismiss]);
+
     if (!message) return null;
+
     const typeClasses = { success: "bg-green-500", error: "bg-red-500", info: "bg-blue-500", warning: "bg-yellow-500" };
-    React.useEffect(() => { const timer = setTimeout(() => onDismiss(), 5000); return () => clearTimeout(timer); }, [onDismiss]);
     return (<div className={`fixed top-5 right-5 p-4 rounded-lg shadow-xl text-white z-[100] animate-fade-in-down ${typeClasses[type]}`} onClick={onDismiss}>{message}</div>);
 };
 
@@ -84,6 +98,11 @@ export default function App() {
     }, []);
 
     React.useEffect(() => {
+        if (!firebaseConfig.apiKey) {
+            setNotification({ message: "Configuração do Firebase não encontrada. Verifique as variáveis de ambiente.", type: 'error' });
+            setLoading(false);
+            return;
+        }
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
                 const userDocRef = doc(db, `/artifacts/${appId}/users`, firebaseUser.uid);
@@ -97,9 +116,8 @@ export default function App() {
                 setUser(firebaseUser);
             } else {
                 try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-                    else await signInAnonymously(auth);
-                } catch (error) { console.error("Erro na autenticação:", error); setNotification({ message: "Falha na autenticação.", type: 'error' }); }
+                    await signInAnonymously(auth);
+                } catch (error) { console.error("Erro na autenticação anônima:", error); setNotification({ message: "Falha na autenticação. Verifique a configuração do Firebase.", type: 'error' }); }
             }
             setLoading(false);
         });
